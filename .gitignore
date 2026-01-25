@@ -1,0 +1,6 @@
+# filepath: d:\AI Learn\pdf-search-ta\.gitignore
+.venv/
+__pycache__/
+*.pyc
+data/index.sqlite3
+data/benchmark.csv

@@ -1,0 +1,271 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>PDF Keyword Search</title>
+
+    <link rel="stylesheet" href="{{ url_for('static', path='app.css') }}" />
+    <!-- IMPORTANT: jangan pakai defer; init chart dilakukan setelah DOMContentLoaded -->
+    <script src="{{ url_for('static', path='vendor/chart.umd.min.js') }}"></script>
+  </head>
+
+  <body>
+    <div class="container">
+      <div class="hero">
+        <div class="title">
+          <div>
+            <h1 class="h1">PDF Keyword Search</h1>
+            <p class="sub">Search cepat pada PDF text-based memakai Naive, KMP, dan Boyer–Moore–Horspool.</p>
+            <div class="pills">
+              <span class="pill">Index: <b>{{ pdf_count }}</b> PDF</span>
+              <span class="pill">Folder: <span class="mono">data/pdfs/</span></span>
+              <a class="pill" href="/reindex">Reindex</a>
+            </div>
+          </div>
+        </div>
+
+        <div class="grid">
+          <div class="card">
+            <div class="card-h">
+              <div>
+                <div class="label">Upload PDF</div>
+                <div class="small">Batas: {{ max_upload_mb }} MB. Setelah upload, index otomatis ter-update.</div>
+              </div>
+            </div>
+            <div class="card-b">
+              <form id="uploadForm" action="/upload" method="post" enctype="multipart/form-data" class="row">
+                <input id="pdfInput" class="input" type="file" name="pdf" accept="application/pdf" required />
+                <button id="uploadBtn" class="btn" type="submit">Upload</button>
+                <span id="uploadHint" class="small"></span>
+              </form>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-h">
+              <div>
+                <div class="label">Search</div>
+                <div class="small">Exact match (case-insensitive). Pilih algoritma untuk komparasi performa.</div>
+              </div>
+            </div>
+            <div class="card-b">
+              <form id="searchForm" action="/search" method="get" class="inline">
+                <input class="input" type="text" name="q" value="{{ q }}" placeholder="Masukkan keyword/frasa" required />
+                <select class="select" name="algo">
+                  {% for a in algos %}
+                    <option value="{{ a.key }}" {% if a.key == algo %}selected{% endif %}>{{ a.name }}</option>
+                  {% endfor %}
+                </select>
+                <button id="searchBtn" class="btn" type="submit">Cari</button>
+              </form>
+            </div>
+          </div>
+        </div>
+
+        <div style="margin-top: 16px;" class="card">
+          <div class="card-h">
+            <div>
+              <div class="label">Status</div>
+              <div class="small">Ringkasan proses terakhir</div>
+            </div>
+          </div>
+          <div class="card-b">
+            {% if stats %}
+              <div class="stats">
+                {% if stats.message %}
+                  <div><b>{{ stats.message }}</b></div>
+                {% else %}
+                  <div class="kv">
+                    <div><p class="k">Algoritma</p><p class="v">{{ stats.algo }}</p></div>
+                    <div><p class="k">Waktu</p><p class="v">{{ "%.2f"|format(stats.ms) }} ms</p></div>
+                    <div><p class="k">Dokumen discan</p><p class="v">{{ stats.docs_scanned }}</p></div>
+                    <div><p class="k">Dokumen match</p><p class="v">{{ stats.matches_docs }}</p></div>
+                  </div>
+                {% endif %}
+              </div>
+            {% else %}
+              <div class="small">Belum ada aktivitas. Jalankan pencarian atau upload PDF.</div>
+            {% endif %}
+
+            {% if stats and not stats.message %}
+              <div id="statsData" data-algo="{{ stats.algo }}" data-ms="{{ stats.ms }}" data-q="{{ q|e }}"></div>
+            {% endif %}
+          </div>
+        </div>
+
+        <div style="margin-top: 16px;" class="grid">
+          <div class="card">
+            <div class="card-h">
+              <div>
+                <div class="label">Grafik: Search History</div>
+                <div class="small">Tersimpan di browser (localStorage), otomatis tiap search.</div>
+              </div>
+              <button id="clearHistory" class="btn btn-ghost" type="button">Clear</button>
+            </div>
+            <div class="card-b">
+              <div class="chart-wrap"><canvas id="searchChart"></canvas></div>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-h">
+              <div>
+                <div class="label">Grafik: Benchmark CSV</div>
+                <div class="small">Muncul setelah menjalankan scripts/benchmark.py</div>
+              </div>
+            </div>
+            <div class="card-b">
+              {% if bench %}
+                <div class="chart-wrap"><canvas id="benchChart"></canvas></div>
+                <script id="benchData" type="application/json">
+                  { "labels": {{ bench.labels|tojson }}, "avg_ms": {{ bench.avg_ms|tojson }}, "total_ms": {{ bench.total_ms|tojson }} }
+                </script>
+              {% else %}
+                <div class="small">Belum ada data benchmark. Jalankan benchmark untuk membuat data/benchmark.csv.</div>
+              {% endif %}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {% if results is not none %}
+        <div class="results">
+          <h2 style="margin: 18px 0 8px;">Hasil</h2>
+          {% if results|length == 0 %}
+            <div class="card"><div class="card-b">Tidak ada hasil.</div></div>
+          {% endif %}
+
+          {% for r in results %}
+            <div class="result">
+              <div class="result-top">
+                <div>
+                  <div style="font-weight: 900;">{{ r.filename }}</div>
+                  <div class="small">Kemunculan: <b>{{ r.count }}</b></div>
+                </div>
+                <div class="row">
+                  <span class="badge">hits={{ r.count }}</span>
+                  <a class="btn btn-ghost" href="/pdf/{{ r.filename }}">Buka PDF</a>
+                </div>
+              </div>
+              <div class="result-body">
+                <div class="small">Posisi (maks):</div>
+                <div class="code">{{ r.positions }}</div>
+                <div class="hr"></div>
+                <div class="small">Snippet:</div>
+                <ul style="margin: 10px 0 0; padding-left: 18px;">
+                  {% for s in r.snippets %}
+                    <li style="margin: 8px 0;"><div class="code">{{ s }}</div></li>
+                  {% endfor %}
+                </ul>
+              </div>
+            </div>
+          {% endfor %}
+        </div>
+      {% endif %}
+
+      <div class="footer">
+        Akses via <span class="mono">http://127.0.0.1:8000/</span> (jangan buka file HTML langsung).
+      </div>
+    </div>
+
+    <script>
+      window.addEventListener("DOMContentLoaded", () => {
+        // Upload UX
+        (() => {
+          const input = document.getElementById("pdfInput");
+          const hint = document.getElementById("uploadHint");
+          const btn = document.getElementById("uploadBtn");
+          const form = document.getElementById("uploadForm");
+
+          if (input && hint) {
+            input.addEventListener("change", () => {
+              const f = input.files && input.files[0];
+              hint.textContent = f ? ("Selected: " + f.name) : "";
+            });
+          }
+          if (form && btn) {
+            form.addEventListener("submit", () => {
+              btn.disabled = true;
+              btn.textContent = "Uploading...";
+            });
+          }
+        })();
+
+        // Chart: Search History
+        (() => {
+          const canvas = document.getElementById("searchChart");
+          if (!canvas || !window.Chart) return;
+
+          const key = "pdfSearchHistoryV1";
+          const load = () => { try { return JSON.parse(localStorage.getItem(key) || "[]"); } catch { return []; } };
+          const save = (arr) => localStorage.setItem(key, JSON.stringify(arr.slice(-60)));
+
+          const statsEl = document.getElementById("statsData");
+          if (statsEl) {
+            const algo = statsEl.dataset.algo || "Unknown";
+            const ms = Number(statsEl.dataset.ms);
+            const q = (statsEl.dataset.q || "").slice(0, 60);
+            if (Number.isFinite(ms) && ms > 0) {
+              const arr = load();
+              arr.push({ t: Date.now(), algo, ms, q });
+              save(arr);
+            }
+          }
+
+          const history = load();
+          const algos = Array.from(new Set(history.map(h => h.algo)));
+          const labels = history.map((e) => new Date(e.t).toLocaleTimeString());
+
+          const datasets = algos.map((a) => ({
+            label: a,
+            data: history.map((e) => (e.algo === a ? e.ms : null)),
+            spanGaps: true,
+            tension: 0.25,
+            borderWidth: 2,
+            pointRadius: 2
+          }));
+
+          const chart = new Chart(canvas, {
+            type: "line",
+            data: { labels, datasets },
+            options: { responsive: true, maintainAspectRatio: false }
+          });
+
+          const clearBtn = document.getElementById("clearHistory");
+          if (clearBtn) {
+            clearBtn.addEventListener("click", () => {
+              localStorage.removeItem(key);
+              chart.data.labels = [];
+              chart.data.datasets.forEach(ds => ds.data = []);
+              chart.update();
+            });
+          }
+        })();
+
+        // Chart: Benchmark CSV
+        (() => {
+          const el = document.getElementById("benchData");
+          const canvas = document.getElementById("benchChart");
+          if (!el || !canvas || !window.Chart) return;
+
+          let data;
+          try { data = JSON.parse(el.textContent); } catch { return; }
+          if (!data || !data.labels) return;
+
+          new Chart(canvas, {
+            type: "bar",
+            data: {
+              labels: data.labels,
+              datasets: [
+                { label: "avg ms / query", data: data.avg_ms, borderWidth: 1 },
+                { label: "total ms", data: data.total_ms, borderWidth: 1 }
+              ]
+            },
+            options: { responsive: true, maintainAspectRatio: false }
+          });
+        })();
+      });
+    </script>
+  </body>
+</html>

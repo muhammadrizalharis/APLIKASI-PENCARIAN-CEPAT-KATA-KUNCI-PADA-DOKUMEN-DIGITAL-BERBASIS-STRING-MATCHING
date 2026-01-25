@@ -1,0 +1,7 @@
+# filepath: d:\AI Learn\pdf-search-ta\requirements.txt
+fastapi==0.115.6
+uvicorn[standard]==0.30.6
+Jinja2==3.1.4
+pypdf==5.1.0
+python-multipart
+
