@@ -130,11 +130,10 @@ Biasanya performa algoritma (tergantung PDF & keyword) akan seperti ini:
 
 ---
 
-## 👨‍💻 Author
-Project Praktikum / Tugas: **Aplikasi Pencarian Cepat Kata Kunci pada Dokumen PDF berbasis String Matching**  
-Universitas Muhammadiyah Makassar (UNISMUH)
+## 👥 Tim Pengembang
 
----
+| No | Nama | NIM |
+|---|------|-----|
+| 1 | Muhammad Rizal Haris | 105841103223 |
+| 2 | Agung Adi Rangga | 105841102323 |
 
-## 📄 License
-Academic / Educational Use Only
